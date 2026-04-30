@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+
+# uploads (runtime user content)
+uploads/*
+!uploads/.gitkeep
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# build / coverage
+dist/
+build/
+coverage/
+
+# misc
+*.pem
+.cache/
