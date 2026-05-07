@@ -3,6 +3,7 @@ const db = require("../db");
 const protect = require("../middleware/authMiddleware");
 const { adminOnly } = require("../middleware/adminMiddleware");
 const asyncHandler = require("../middleware/asyncHandler");
+const { recordAudit } = require("../utils/auditLogger");
 
 router.use(protect, adminOnly);
 
@@ -55,6 +56,18 @@ router.get(
   })
 );
 
+router.get(
+  "/audit",
+  asyncHandler(async (req, res) => {
+    const logs = await db.audit.list({
+      page: req.query.page,
+      pageSize: req.query.pageSize,
+      action: req.query.action,
+    });
+    res.json({ success: true, count: logs.length, logs });
+  })
+);
+
 router.delete(
   "/product/:id",
   asyncHandler(async (req, res) => {
@@ -62,6 +75,12 @@ router.delete(
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
+    await recordAudit(req, {
+      action: "admin.product_delete",
+      targetType: "Product",
+      targetId: req.params.id,
+      metadata: { name: product.name },
+    });
     res.json({ success: true, message: "Product deleted" });
   })
 );
@@ -76,6 +95,12 @@ router.delete(
     if (!user) {
       return res.status(404).json({ success: false, message: "User not found" });
     }
+    await recordAudit(req, {
+      action: "admin.user_delete",
+      targetType: "User",
+      targetId: req.params.id,
+      metadata: { email: user.email, role: user.role },
+    });
     res.json({ success: true, message: "User deleted" });
   })
 );

@@ -1,9 +1,6 @@
 /*
  * Products repository.
  * Only file allowed to import the Product Mongoose model.
- * Returned documents support .save() / Object.assign() so callers can mutate
- * and persist — when migrating to Postgres, expose a small `update(doc)` helper
- * here and have callers use it instead of `.save()`.
  */
 
 const Product = require("../models/Product");
@@ -34,6 +31,19 @@ const count = (filter = {}) => Product.countDocuments(filter);
 
 const deleteById = (id) => Product.findByIdAndDelete(id);
 
+const updateById = (id, updates) =>
+  Product.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
+
+const decrementStock = (id, qty) =>
+  Product.findOneAndUpdate(
+    { _id: id, stock: { $gte: qty } },
+    { $inc: { stock: -qty } },
+    { new: true }
+  );
+
+const findByVendor = (vendorId, { sort = { createdAt: -1 } } = {}) =>
+  Product.find({ vendor: vendorId }).sort(sort);
+
 module.exports = {
   findById,
   findByIds,
@@ -42,4 +52,7 @@ module.exports = {
   findFeatured,
   count,
   deleteById,
+  updateById,
+  decrementStock,
+  findByVendor,
 };

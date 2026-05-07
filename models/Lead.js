@@ -15,6 +15,16 @@ const leadSchema = new mongoose.Schema(
   status: {
     type: String,
     default: "New"
+  },
+
+  emailDelivered: {
+    type: Boolean,
+    default: false
+  },
+
+  emailError: {
+    type: String,
+    default: ""
   }
 },
 { timestamps: true }

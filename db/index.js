@@ -16,4 +16,7 @@ module.exports = {
   orders: require("./orders"),
   categories: require("./categories"),
   leads: require("./leads"),
+  coupons: require("./coupons"),
+  blog: require("./blog"),
+  audit: require("./audit"),
 };

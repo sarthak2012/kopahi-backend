@@ -17,6 +17,18 @@ const findByEmail = (email) =>
 const findByEmailWithPassword = (email) =>
   User.findOne({ email: String(email || "").toLowerCase() }).select("+password");
 
+const findByPasswordResetToken = (tokenHash) =>
+  User.findOne({
+    passwordResetToken: tokenHash,
+    passwordResetExpires: { $gt: new Date() },
+  }).select("+passwordResetToken +passwordResetExpires");
+
+const findByEmailVerificationToken = (tokenHash) =>
+  User.findOne({
+    emailVerificationToken: tokenHash,
+    emailVerificationExpires: { $gt: new Date() },
+  }).select("+emailVerificationToken +emailVerificationExpires");
+
 const create = (data) => User.create(data);
 
 const updateById = (id, updates) =>
@@ -29,14 +41,77 @@ const list = (filter = {}, { sort = { createdAt: -1 } } = {}) =>
 
 const count = (filter = {}) => User.countDocuments(filter);
 
+const setPasswordResetToken = (id, tokenHash, expires) =>
+  User.findByIdAndUpdate(id, {
+    passwordResetToken: tokenHash,
+    passwordResetExpires: expires,
+  });
+
+const clearPasswordResetToken = (id, newPasswordHash) =>
+  User.findByIdAndUpdate(id, {
+    password: newPasswordHash,
+    $unset: { passwordResetToken: "", passwordResetExpires: "" },
+  });
+
+const setEmailVerificationToken = (id, tokenHash, expires) =>
+  User.findByIdAndUpdate(id, {
+    emailVerificationToken: tokenHash,
+    emailVerificationExpires: expires,
+    emailVerified: false,
+  });
+
+const markEmailVerified = (id) =>
+  User.findByIdAndUpdate(
+    id,
+    {
+      emailVerified: true,
+      $unset: { emailVerificationToken: "", emailVerificationExpires: "" },
+    },
+    { new: true }
+  );
+
+const updatePassword = (id, hashed) =>
+  User.findByIdAndUpdate(id, { password: hashed });
+
+const getWishlist = (id) =>
+  User.findById(id).populate("wishlist").select("wishlist");
+
+const addToWishlist = (id, productId) =>
+  User.findByIdAndUpdate(id, { $addToSet: { wishlist: productId } }, { new: true });
+
+const removeFromWishlist = (id, productId) =>
+  User.findByIdAndUpdate(id, { $pull: { wishlist: productId } }, { new: true });
+
+const getCart = (id) =>
+  User.findById(id).populate("cart.product").select("cart");
+
+const replaceCart = (id, items) =>
+  User.findByIdAndUpdate(id, { cart: items }, { new: true });
+
+const clearCart = (id) =>
+  User.findByIdAndUpdate(id, { cart: [] }, { new: true });
+
 module.exports = {
   findById,
   findByIdWithPassword,
   findByEmail,
   findByEmailWithPassword,
+  findByPasswordResetToken,
+  findByEmailVerificationToken,
   create,
   updateById,
   deleteById,
   list,
   count,
+  setPasswordResetToken,
+  clearPasswordResetToken,
+  setEmailVerificationToken,
+  markEmailVerified,
+  updatePassword,
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+  getCart,
+  replaceCart,
+  clearCart,
 };

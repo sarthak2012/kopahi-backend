@@ -1,0 +1,486 @@
+openapi: 3.0.3
+info:
+  title: Kopahi API
+  version: 1.0.0
+  description: |
+    REST API for the Kopahi B2B2C agri-marketplace.
+    All authenticated endpoints accept a JWT in `Authorization: Bearer <token>`.
+servers:
+  - url: http://localhost:5000
+    description: Local development
+tags:
+  - name: Auth
+  - name: Products
+  - name: Orders
+  - name: Cart
+  - name: Wishlist
+  - name: Categories
+  - name: Coupons
+  - name: Blog
+  - name: Contact
+  - name: Admin
+  - name: Vendor
+  - name: Payment
+  - name: System
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        message: { type: string }
+    User:
+      type: object
+      properties:
+        _id: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [user, vendor, admin] }
+        phone: { type: string }
+        businessName: { type: string }
+        emailVerified: { type: boolean }
+    Product:
+      type: object
+      properties:
+        _id: { type: string }
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        price: { type: number }
+        originalPrice: { type: number }
+        stock: { type: integer }
+        category: { type: string }
+        images: { type: array, items: { type: string } }
+        featured: { type: boolean }
+        isActive: { type: boolean }
+        vendor: { type: string, nullable: true }
+    OrderItem:
+      type: object
+      properties:
+        product: { type: string }
+        name: { type: string }
+        image: { type: string }
+        price: { type: number }
+        quantity: { type: integer }
+    Order:
+      type: object
+      properties:
+        _id: { type: string }
+        user: { type: string }
+        items: { type: array, items: { $ref: "#/components/schemas/OrderItem" } }
+        itemsPrice: { type: number }
+        shippingPrice: { type: number }
+        taxPrice: { type: number }
+        totalPrice: { type: number }
+        couponCode: { type: string }
+        couponDiscount: { type: number }
+        paymentStatus: { type: string, enum: [Pending, Paid, Failed] }
+        orderStatus:
+          type: string
+          enum: [Placed, Processing, Packed, Shipped, Delivered, Cancelled]
+    Coupon:
+      type: object
+      properties:
+        code: { type: string }
+        percentDiscount: { type: number }
+        description: { type: string }
+        minSubtotal: { type: number }
+        maxDiscount: { type: number }
+        usageLimit: { type: integer }
+        usedCount: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        active: { type: boolean }
+    BlogPost:
+      type: object
+      properties:
+        _id: { type: string }
+        title: { type: string }
+        slug: { type: string }
+        excerpt: { type: string }
+        content: { type: string }
+        coverImage: { type: string }
+        author: { type: string }
+        tags: { type: array, items: { type: string } }
+        publishedAt: { type: string, format: date-time }
+paths:
+  /api/health:
+    get:
+      tags: [System]
+      summary: Health check
+      responses:
+        "200": { description: OK }
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user (role = user or vendor)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 12 }
+                phone: { type: string }
+                role: { type: string, enum: [user, vendor] }
+                businessName: { type: string }
+      responses:
+        "201": { description: Created }
+        "400": { description: Validation error }
+        "409": { description: Email exists }
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in with email + password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                remember: { type: boolean }
+      responses:
+        "200": { description: OK }
+        "401": { description: Invalid credentials }
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current authenticated user
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+    put:
+      tags: [Auth]
+      summary: Update profile fields (name, phone, businessName)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+  /api/auth/me/password:
+    put:
+      tags: [Auth]
+      summary: Change password (requires current password)
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+        "401": { description: Wrong current password }
+  /api/auth/forgot-password:
+    post:
+      tags: [Auth]
+      summary: Request a password reset email (always 200 to avoid email enumeration)
+      responses:
+        "200": { description: Always OK }
+  /api/auth/reset-password:
+    post:
+      tags: [Auth]
+      summary: Reset password using token from email
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid or expired token }
+  /api/auth/verify-email:
+    post:
+      tags: [Auth]
+      summary: Verify email address using token
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid or expired token }
+  /api/auth/resend-verification:
+    post:
+      tags: [Auth]
+      summary: Resend email verification link
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+  /api/products:
+    get:
+      tags: [Products]
+      parameters:
+        - in: query
+          name: keyword
+          schema: { type: string }
+        - in: query
+          name: category
+          schema: { type: string }
+        - in: query
+          name: page
+          schema: { type: integer }
+        - in: query
+          name: pageSize
+          schema: { type: integer }
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Products]
+      security: [{ bearerAuth: [] }]
+      summary: Create product (vendor or admin)
+      responses:
+        "201": { description: Created }
+  /api/products/{id}:
+    get:
+      tags: [Products]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    put:
+      tags: [Products]
+      security: [{ bearerAuth: [] }]
+      summary: Update product (admin, or vendor on own)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Products]
+      security: [{ bearerAuth: [] }]
+      summary: Delete product (admin, or vendor on own)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/products/featured/list:
+    get:
+      tags: [Products]
+      responses:
+        "200": { description: OK }
+  /api/products/upload:
+    post:
+      tags: [Products]
+      security: [{ bearerAuth: [] }]
+      summary: Upload product image (multipart "image")
+      responses:
+        "200": { description: OK }
+  /api/orders:
+    post:
+      tags: [Orders]
+      security: [{ bearerAuth: [] }]
+      summary: Place order. Server recomputes prices, applies coupon, decrements stock.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      product: { type: string }
+                      quantity: { type: integer }
+                shippingAddress:
+                  type: object
+                paymentMethod: { type: string, enum: [COD, Online] }
+                couponCode: { type: string }
+      responses:
+        "201": { description: Created }
+    get:
+      tags: [Orders]
+      security: [{ bearerAuth: [] }]
+      summary: Admin — list all orders
+      responses:
+        "200": { description: OK }
+  /api/orders/mine:
+    get:
+      tags: [Orders]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}:
+    get:
+      tags: [Orders]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}/status:
+    put:
+      tags: [Orders]
+      security: [{ bearerAuth: [] }]
+      summary: Admin — update order status
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/orders/{id}/cancel:
+    put:
+      tags: [Orders]
+      security: [{ bearerAuth: [] }]
+      summary: Cancel order (owner or admin). Restores stock.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/orders/coupon/validate:
+    post:
+      tags: [Orders]
+      summary: Validate a coupon code against a subtotal
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                subtotal: { type: number }
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid }
+  /api/cart:
+    get:
+      tags: [Cart]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+    put:
+      tags: [Cart]
+      security: [{ bearerAuth: [] }]
+      summary: Replace server-side cart with provided items
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Cart]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+  /api/wishlist:
+    get:
+      tags: [Wishlist]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+  /api/wishlist/{productId}:
+    post:
+      tags: [Wishlist]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+    delete:
+      tags: [Wishlist]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: productId
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/categories:
+    get:
+      tags: [Categories]
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Categories]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: Created }
+  /api/coupons:
+    get:
+      tags: [Coupons]
+      security: [{ bearerAuth: [] }]
+      summary: Admin — list coupons
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Coupons]
+      security: [{ bearerAuth: [] }]
+      summary: Admin — create coupon
+      responses:
+        "201": { description: Created }
+  /api/blog:
+    get:
+      tags: [Blog]
+      responses:
+        "200": { description: OK }
+    post:
+      tags: [Blog]
+      security: [{ bearerAuth: [] }]
+      summary: Admin — create blog post
+      responses:
+        "201": { description: Created }
+  /api/blog/{slug}:
+    get:
+      tags: [Blog]
+      parameters:
+        - in: path
+          name: slug
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+  /api/contact:
+    post:
+      tags: [Contact]
+      summary: Submit a contact lead (rate-limited)
+      responses:
+        "201": { description: Created }
+  /api/admin/dashboard:
+    get:
+      tags: [Admin]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+  /api/admin/audit:
+    get:
+      tags: [Admin]
+      security: [{ bearerAuth: [] }]
+      summary: Recent audit log entries
+      responses:
+        "200": { description: OK }
+  /api/vendor/products:
+    get:
+      tags: [Vendor]
+      security: [{ bearerAuth: [] }]
+      summary: Vendor's own products
+      responses:
+        "200": { description: OK }
+  /api/payment/razorpay/order:
+    post:
+      tags: [Payment]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+        "503": { description: Payments not configured }
+  /api/payment/razorpay/verify:
+    post:
+      tags: [Payment]
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: OK }
+        "400": { description: Invalid signature }

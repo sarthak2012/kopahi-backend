@@ -4,6 +4,8 @@ const upload = require("../utils/uploadCloudinary");
 const protect = require("../middleware/authMiddleware");
 const { adminOnly, vendorOrAdmin } = require("../middleware/adminMiddleware");
 const asyncHandler = require("../middleware/asyncHandler");
+const escapeRegex = require("../utils/escapeRegex");
+const { recordAudit } = require("../utils/auditLogger");
 
 const slugify = (name) =>
   String(name)
@@ -36,7 +38,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const filter = { isActive: { $ne: false } };
     if (req.query.keyword) {
-      filter.name = { $regex: req.query.keyword, $options: "i" };
+      filter.name = { $regex: escapeRegex(req.query.keyword), $options: "i" };
     }
     if (req.query.category && req.query.category !== "All") {
       filter.category = req.query.category;
@@ -72,7 +74,7 @@ router.get(
   })
 );
 
-/* Create product — vendors and admins */
+/* Create product — vendors and admins. Vendors are auto-attached as owner. */
 router.post(
   "/",
   protect,
@@ -80,37 +82,74 @@ router.post(
   asyncHandler(async (req, res) => {
     const data = { ...req.body };
     if (!data.slug && data.name) data.slug = `${slugify(data.name)}-${Date.now()}`;
+    if (req.user.role === "vendor") data.vendor = req.user._id;
     const product = await db.products.create(data);
+    await recordAudit(req, {
+      action: "product.create",
+      targetType: "Product",
+      targetId: product._id,
+      metadata: { name: product.name },
+    });
     res.status(201).json({ success: true, message: "Product created", product });
   })
 );
 
-/* Update product — admin (vendors edit only their own through a separate route in future) */
+/* Update product — admin always; vendor only on their own product */
 router.put(
   "/:id",
   protect,
-  adminOnly,
+  vendorOrAdmin,
   asyncHandler(async (req, res) => {
     const product = await db.products.findById(req.params.id);
     if (!product) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
-    Object.assign(product, req.body);
-    await product.save();
-    res.json({ success: true, message: "Product updated", product });
+    if (
+      req.user.role === "vendor" &&
+      String(product.vendor || "") !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ success: false, message: "You can only edit your own products" });
+    }
+    const updates = { ...req.body };
+    if (req.user.role === "vendor") delete updates.vendor;
+    const updated = await db.products.updateById(req.params.id, updates);
+    await recordAudit(req, {
+      action: "product.update",
+      targetType: "Product",
+      targetId: updated._id,
+      metadata: { changedKeys: Object.keys(updates) },
+    });
+    res.json({ success: true, message: "Product updated", product: updated });
   })
 );
 
-/* Delete product — admin */
+/* Delete product — admin always; vendor only on their own */
 router.delete(
   "/:id",
   protect,
-  adminOnly,
+  vendorOrAdmin,
   asyncHandler(async (req, res) => {
-    const product = await db.products.deleteById(req.params.id);
-    if (!product) {
+    const existing = await db.products.findById(req.params.id);
+    if (!existing) {
       return res.status(404).json({ success: false, message: "Product not found" });
     }
+    if (
+      req.user.role === "vendor" &&
+      String(existing.vendor || "") !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ success: false, message: "You can only delete your own products" });
+    }
+    await db.products.deleteById(req.params.id);
+    await recordAudit(req, {
+      action: "product.delete",
+      targetType: "Product",
+      targetId: req.params.id,
+      metadata: { name: existing.name },
+    });
     res.json({ success: true, message: "Product deleted" });
   })
 );

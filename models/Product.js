@@ -57,6 +57,13 @@ const productSchema = new mongoose.Schema(
     required: true
   },
 
+  vendor: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    default: null,
+    index: true
+  },
+
   price: {
     type: Number,
     required: true
