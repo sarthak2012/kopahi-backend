@@ -7,6 +7,8 @@ const { recordAudit } = require("../utils/auditLogger");
 
 router.use(protect, adminOnly);
 
+
+
 router.get(
   "/dashboard",
   asyncHandler(async (req, res) => {
